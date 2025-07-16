@@ -28,8 +28,10 @@ OUT_BIN		= bootloader-$(ARCH).bin
 build:
 	$(if $(filter $(ARCH), $(ARCHS)), , $(error Unsupported ARCH: $(ARCH)))
 	
-	cargo build --release --target $(TARGET) RUSTFLAGS="-C link-arg=-T$(LD_SCRIPT)"
-	llvm-objcopy -O binary $(BOOT_ELF) $(OUT_BIN)
+	@RUSTFLAGS="-C link-arg=-T$(LD_SCRIPT)" \
+		cargo build --release --target $(TARGET)
+	
+	@llvm-objcopy -O binary $(BOOT_ELF) $(OUT_BIN)
 
 # Clean build artifacts
 clean:
