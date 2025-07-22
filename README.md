@@ -1,7 +1,7 @@
 # RustFoundryOS
 Developer-first OS built in Rust
 
-# How to build and run this project
+## How to build and run this project
 If you are interested in building/running this project locally, follow these steps:
 
 **Note:** These instructions were written using Ubuntu on WSL2.
