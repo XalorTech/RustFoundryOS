@@ -1,31 +1,52 @@
+# ===============================================================================
+# RustFoundry OS:
+# Developer-first OS built in Rust, including console-only "Bare Metal Edition".
+# Copyright (C) 2025 XalorTech
+# License: GPLv3 (see LICENSE.md for details)
+# ===============================================================================
+
 # ----------------------------------------
 # Variables & Architecture Aliases
 # ----------------------------------------
-ARCH_X64   := x86_64
-ARCH_ARM64 := aarch64
+# ARCH_X64 / ARCH_ARM64:
+#   Canonical architecture identifiers used throughout the Makefile.
+# ARCHS:
+#   Space-separated list of architectures to process. Defaults to both.
+# DEBUG:
+#   true  -> Enable QEMU debug flags (breakpoints, logging, no reboot/shutdown).
+#   false -> Normal run mode.
+ARCH_X64	:= x86_64
+ARCH_ARM64	:= aarch64
 
-ARCHS ?= $(ARCH_X64) $(ARCH_ARM64)
-DEBUG ?= false
+ARCHS		?= $(ARCH_X64) $(ARCH_ARM64)
+DEBUG		?= false
 
 # ----------------------------------------
-# Default goal: if no target is given, show help
+# Default goal
 # ----------------------------------------
+# If no target is given, show the help text.
 .DEFAULT_GOAL := help
 
-.PHONY: help all clean build run
+.PHONY: help setup all clean lint build run
 
 # ----------------------------------------
-# help: display usage, targets, variables
+# help: Display usage, targets, and variables
 # ----------------------------------------
+# Prints a summary of available targets, variables, and example invocations.
+# This is the first stop for new contributors.
 help:
 	@echo ""
 	@echo "Usage: make [TARGET] [VARIABLE=value]..."
 	@echo ""
 	@echo "Targets:"
 	@echo "  help     Show this message"
-	@echo "  all      Clean, build, and run (default if no target)"
+	@echo "  setup    Install all required tools and Rust components for building"
+	@echo "           (runs scripts/setup_env.sh; safe to re-run anytime)"
+	@echo "  all      Clean, lint, build, and run (default if no target)"
 	@echo "  clean    Remove all build artifacts"
-	@echo "  build    Assemble bootsectors for \$$ARCHS"
+	@echo "  lint     Run static checks (license headers, real tabs, etc.)"
+	@echo "  build    Build the entire RustFoundry OS for \$$ARCHS"
+	@echo "           (lint is required and will stop build on failure)"
 	@echo "  run      Launch QEMU for \$$ARCHS"
 	@echo ""
 	@echo "Variables (override with VAR=value):"
@@ -33,67 +54,149 @@ help:
 	@echo "  DEBUG    true to enable QEMU debug flags (default: $(DEBUG))"
 	@echo ""
 	@echo "Examples:"
+	@echo "  make setup                         # one-time environment setup"
+	@echo "  make all ARCHS=x86_64 DEBUG=true   # clean, lint, build, and run"
+	@echo "  make clean                         # remove all build artifacts"
+	@echo "  make lint                          # run static checks"
 	@echo "  make build ARCHS=x86_64            # build only x86_64"
 	@echo "  make run ARCHS=aarch64 DEBUG=true  # run aarch64 in debug mode"
 	@echo ""
 
 # ----------------------------------------
-# all: clean → build → run
+# setup: Install all required tools and Rust components
 # ----------------------------------------
-all: clean build run
+# Runs the cross-platform environment setup script:
+#   - Installs rustup if missing
+#   - Updates Rust and adds required targets/components
+#   - Installs NASM, Clang, QEMU (via apt/brew/winget)
+#   - Checks minimum versions
+# Safe to re-run at any time.
+setup:
+	@echo "[SETUP] Running environment setup script..."
+	@bash scripts/setup_env.sh
 
 # ----------------------------------------
-# clean: remove artifacts
+# all: Clean → Lint → Build → Run
 # ----------------------------------------
+# This is the canonical build path for the entire OS — including the bootloader.
+# Sequence:
+#   1. clean  -> Remove all build artifacts
+#   2. lint   -> Run static checks (required; stops build on failure)
+#   3. build  -> Build the OS for all architectures in $(ARCHS)
+#   4. run    -> Launch QEMU for each architecture
+all: clean lint build run
+
+# ----------------------------------------
+# clean: Remove build artifacts
+# ----------------------------------------
+# Deletes all generated files and directories from previous builds.
+# This ensures a clean slate for reproducible builds.
 clean:
 	@echo "[CLEAN] Removing all build artifacts..."
-	@rm -rf target
+	@rm -rf target dist
 
 # ----------------------------------------
-# build: assemble per‐ARCH
+# lint: Run all modular lint checks
 # ----------------------------------------
-build:
-	@echo "[BUILD] Building for architectures: $(ARCHS)"
+# Runs every lint script in scripts/lint/ to enforce project coding standards:
+#   - check_license_header.sh : Ensures the exact RustFoundry OS license header
+#                               is present in approved file types only.
+#   - check_tabs.sh           : Ensures real tabs are used for indentation
+#                               (spaces only where required).
+#   - check_newline_eof.sh    : Ensures a single newline at the end of each file.
+#
+# All lint rules are mandatory. If any check fails, the build stops immediately.
+# This target is a required quality gate for all builds.
+lint:
+	@echo "[LINT] Running all lint checks..."
+	@for script in scripts/lint/*.sh; do \
+		echo "[LINT] Running $$script..."; \
+		bash $$script || exit 1; \
+	done
+	@echo "[LINT] All checks passed — everything is awesome!"
+
+# ----------------------------------------
+# build: Build the entire RustFoundry OS for each target architecture
+# ----------------------------------------
+# This target:
+#   1. Runs lint first (quality gate).
+#   2. Invokes Cargo to build all OS components (bootloader, kernel, etc.)
+#      for the specified UEFI target triple.
+#   3. Produces a UEFI-compatible .EFI image for each architecture.
+#   4. Copies the .EFI into dist/<arch>/EFI/BOOT with the correct UEFI boot filename
+#      for use in an ESP (EFI System Partition) when running in QEMU or on hardware.
+#
+# Notes:
+#   - The bootloader's build.rs handles assembling the architecture-specific
+#     entry veneer and linking it with Rust code.
+#   - This is the canonical build path for the entire OS — including the bootloader.
+#   - Lint is required and will stop the build if it fails.
+build: lint
+	@echo "[BUILD] Building RustFoundry OS for architectures: $(ARCHS)"
 	@for ARCH in $(ARCHS); do \
-	  echo "[BUILD] Building for $$ARCH..."; \
-	  TARGET=$$ARCH-unknown-none; \
-	  ASM_SRC_DIR=bootloader/asm/$$ARCH; \
-	  ASM_BIN_DIR=target/$$TARGET/artifacts; \
-	  ASM_SRC=$$ASM_SRC_DIR/bootsector.asm; \
-	  ASM_BIN=$$ASM_BIN_DIR/bootsector.bin; \
-	  mkdir -p $$ASM_BIN_DIR; \
-	  if [ -f $$ASM_SRC ]; then \
-	    echo "[BUILD] Assembling $$ASM_SRC"; \
-	    nasm -f bin -I $$ASM_SRC_DIR -o $$ASM_BIN $$ASM_SRC; \
-	  else \
-	    echo "[BUILD] No source for $$ARCH, skipping..."; \
-	  fi; \
+		echo "[BUILD] Starting full OS build for $$ARCH..."; \
+		if [ "$$ARCH" = "$(ARCH_X64)" ]; then \
+			TARGET_TRIPLE="x86_64-unknown-uefi"; \
+			UEFI_BOOT_FILE="BOOTX64.EFI"; \
+		elif [ "$$ARCH" = "$(ARCH_ARM64)" ]; then \
+			TARGET_TRIPLE="aarch64-unknown-uefi"; \
+			UEFI_BOOT_FILE="BOOTAA64.EFI"; \
+		else \
+			echo "[BUILD] Unsupported architecture: $$ARCH, skipping..."; \
+			continue; \
+		fi; \
+		cargo build --target $$TARGET_TRIPLE --workspace; \
+		OUT_DIR="target/$$TARGET_TRIPLE/debug"; \
+		mkdir -p dist/$$ARCH/EFI/BOOT; \
+		cp $$OUT_DIR/bootloader.efi dist/$$ARCH/EFI/BOOT/$$UEFI_BOOT_FILE; \
+		echo "[BUILD] OS image ready: dist/$$ARCH/EFI/BOOT/$$UEFI_BOOT_FILE"; \
 	done
 
 # ----------------------------------------
-# run: qemu per‐ARCH
+# run: Launch QEMU for each architecture
 # ----------------------------------------
+# Boots the built OS in QEMU using UEFI firmware:
+#   - x86_64 uses OVMF (OVMF_CODE.fd / OVMF_VARS.fd)
+#   - aarch64 uses QEMU_EFI.fd (or equivalent ARM UEFI firmware)
+#
+# Expects:
+#   - dist/<arch>/EFI/BOOT/BOOT*.EFI from the build step
+#   - Firmware files present in the working directory
+#
+# DEBUG=true enables QEMU debug flags for breakpoints, logging, and no reboot/shutdown.
 run:
-	@echo "[RUN] Running for architectures: $(ARCHS)"
+	@echo "[RUN] Running RustFoundry OS for architectures: $(ARCHS)"
 	@for ARCH in $(ARCHS); do \
-	  echo "[RUN] Launching QEMU for $$ARCH..."; \
-	  TARGET=$$ARCH-unknown-none; \
-	  ASM_BIN_DIR=target/$$TARGET/artifacts; \
-	  IMG=$$ASM_BIN_DIR/bootsector.bin; \
-	  DRIVE=format=raw,file=$$IMG; \
-	  DEBUG_OPTS=""; \
-	  if [ "$(DEBUG)" = "true" ]; then \
-	    DEBUG_OPTS="-s -S -d int,cpu,exec -no-reboot -no-shutdown \
-	                -D $$ASM_BIN_DIR/qemu.log"; \
-	  fi; \
-	  if [ "$$ARCH" = "x86_64" ]; then \
-	    QEMU_OPTS="-drive $$DRIVE $$DEBUG_OPTS"; \
-	  elif [ "$$ARCH" = "aarch64" ]; then \
-	    QEMU_OPTS="-machine virt -cpu cortex-a57 -nographic \
-	                -drive $$DRIVE $$DEBUG_OPTS"; \
-	  else \
-	    echo "[RUN] No run command for $$ARCH, skipping..."; \
-	    continue; \
-	  fi; \
-	  qemu-system-$$ARCH $$QEMU_OPTS; \
+		echo "[RUN] Launching QEMU for $$ARCH..."; \
+		if [ "$$ARCH" = "$(ARCH_X64)" ]; then \
+			if [ ! -f OVMF_CODE.fd ] || [ ! -f OVMF_VARS.fd ]; then \
+				echo "[ERROR] Missing OVMF_CODE.fd or OVMF_VARS.fd"; exit 1; \
+			fi; \
+			if [ ! -f dist/$$ARCH/EFI/BOOT/BOOTX64.EFI ]; then \
+				echo "[ERROR] Missing dist/$$ARCH/EFI/BOOT/BOOTX64.EFI — build first"; exit 1; \
+			fi; \
+			ESP_DIR=dist/$$ARCH; \
+			[ "$(DEBUG)" = "true" ] && DEBUG_OPTS="-s -S -d int,cpu,exec -no-reboot -no-shutdown" || DEBUG_OPTS=""; \
+			qemu-system-x86_64 \
+				-drive if=pflash,format=raw,readonly=on,file=OVMF_CODE.fd \
+				-drive if=pflash,format=raw,file=OVMF_VARS.fd \
+				-drive format=raw,file=fat:rw:$$ESP_DIR \
+				$$DEBUG_OPTS; \
+		elif [ "$$ARCH" = "$(ARCH_ARM64)" ]; then \
+			if [ ! -f QEMU_EFI.fd ]; then \
+				echo "[ERROR] Missing QEMU_EFI.fd"; exit 1; \
+			fi; \
+			if [ ! -f dist/$$ARCH/EFI/BOOT/BOOTAA64.EFI ]; then \
+				echo "[ERROR] Missing dist/$$ARCH/EFI/BOOT/BOOTAA64.EFI — build first"; exit 1; \
+			fi; \
+			ESP_DIR=dist/$$ARCH; \
+			[ "$(DEBUG)" = "true" ] && DEBUG_OPTS="-s -S -d int,cpu,exec -no-reboot -no-shutdown" || DEBUG_OPTS=""; \
+			qemu-system-aarch64 \
+				-machine virt -cpu cortex-a57 \
+				-drive if=pflash,format=raw,readonly=on,file=QEMU_EFI.fd \
+				-drive format=raw,file=fat:rw:$$ESP_DIR \
+				$$DEBUG_OPTS; \
+		else \
+			echo "[RUN] Unsupported architecture: $$ARCH, skipping..."; \
+		fi; \
 	done

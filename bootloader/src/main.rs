@@ -1,27 +1,31 @@
+// ===============================================================================
+// RustFoundry OS:
+// Developer-first OS built in Rust, including console-only "Bare Metal Edition".
+// Copyright (C) 2025 XalorTech
+// License: GPLv3 (see LICENSE.md for details)
+// ===============================================================================
+
 #![no_std]
 #![no_main]
 
-extern crate kernel;
-
+use core::ffi::c_void;
 use core::panic::PanicInfo;
 
-/// Bootloader entry point
-#[unsafe(no_mangle)]
-pub extern "C" fn _start() -> ! {
-    // Bootloader logic will go here...
-    
-    // Load Kernel to start OS
-    kernel::kernel_main()
-}
-
-/// Panic handler: gets invoked on `panic!()`
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
-    // Example: you could write the panic message over serial or VGA.
-    // For now, we just spin forever.
-    //
-    // If you had a `serial_println!()`, you might do:
-    // serial_println!("PANIC: {}", info);
+	loop {
+		unsafe { core::arch::asm!("hlt", options(nomem, nostack, preserves_flags)); }
+	}
+}
 
-    loop {}
+// Stage-0 entry from the veneer.
+// UEFI passes the image handle and system table pointer; we keep them typed-opaque for now.
+#[no_mangle]
+pub extern "C" fn bootloader_stage0(image_handle: usize, system_table: *mut c_void) -> ! {
+	let _ = (image_handle, system_table); // placeholders for now
+
+	// TDD seam: we'll print a deterministic line via UEFI next.
+	loop {
+		unsafe { core::arch::asm!("hlt", options(nomem, nostack, preserves_flags)); }
+	}
 }

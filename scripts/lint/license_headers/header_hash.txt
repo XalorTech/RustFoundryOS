@@ -4,19 +4,3 @@
 # Copyright (C) 2025 XalorTech
 # License: GPLv3 (see LICENSE.md for details)
 # ===============================================================================
-
-[package]
-name = "bootloader"
-version = "0.1.0"
-edition = "2024"
-build = "build.rs"
-
-[dependencies]
-kernel = { path = "../kernel" }
-x86_64 = { version = "0.15.2", default-features = false,features = [
-	"instructions",
-] }
-
-[[bin]]
-name = "bootloader"
-path = "src/main.rs"

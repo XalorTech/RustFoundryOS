@@ -1,0 +1,6 @@
+; ===============================================================================
+; RustFoundry OS:
+; Developer-first OS built in Rust, including console-only "Bare Metal Edition".
+; Copyright (C) 2025 XalorTech
+; License: GPLv3 (see LICENSE.md for details)
+; ===============================================================================

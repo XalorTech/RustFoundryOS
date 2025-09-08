@@ -1,35 +1,32 @@
-# RustFoundryOS
-Developer-first OS built in Rust
+# RustFoundry OS
 
-## How to build and run this project
-If you are interested in building/running this project locally, follow these steps:
+Developer-first OS built in Rust, including console-only `Bare Metal Edition`.
 
-**Note:** These instructions were written using Ubuntu on WSL2.
-- Run this command in your terminal:
-  - `git clone https://github.com/XalorTech/RustFoundryOS.git`
-- In terminal, navigate to the root of the project.
-  - `cd RustFoundryOS`
-- To see available targets and options for `make`, run `make help`.
-  - You should see the following or similar:
+## About
 
-```
-Usage: make [TARGET] [VARIABLE=value]...
+**RustFoundry OS** is a 64‑bit, console‑first operating system designed to run on both **x86_64** and **ARM64** architectures.
+The **Bare Metal Edition** is the initial release, focused entirely on delivering a fast, minimal, and reproducible shell environment without a graphical interface.
 
-Targets:
-  help     Show this message
-  all      Clean, build, and run (default if no target)
-  clean    Remove all build artifacts
-  build    Assemble bootsectors for $ARCHS
-  run      Launch QEMU for $ARCHS
+RustFoundry OS is built with:
+- **Rust** (`no_std`, `no_main`) for safety and maintainability
+- **Minimal Assembly** for architecture setup and configuration during boot sequence
+- **Test‑Driven Development (TDD)** from the boot sequence onward
+- **Modular architecture** for portability and reproducibility
 
-Variables (override with VAR=value):
-  ARCHS    Architectures to process (default: x86_64 aarch64)
-  DEBUG    true to enable QEMU debug flags (default: false)
+## Getting Started
 
-Examples:
-  make build ARCHS=x86_64            # build only x86_64
-  make run ARCHS=aarch64 DEBUG=true  # run aarch64 in debug mode
-```
+### Prerequisites
+- **Rust toolchain** (with `rustup`)
+- **LLVM / LLD** linker
+- **QEMU** for emulation
+- **OVMF** UEFI firmware binaries (for x86_64; AAVMF for ARM64 later)
+- **Make** (GNU Make recommended)
+- **Git** (for cloning and contributing)
 
-- The currently supported targets and variables supported will be listed in the command, such as they are above.
-  - **Note:** While the default is `x86_64 aarch64`, this will currently FAIL. Only the `x86_64` ARCH has been set up thus far, and that only partially. Currently, it will load in 16-bit Real Mode and then raise the system to 32-bit Protected Mode. I will be adding code to then bring the system up to 64-bit Long Mode prior to handing off control to my 64-bit Rust bootloader, which will handle loading the kernel. Once the x86_64 code can successfully call the Rust bootloader, I will focus on adding support for aarch64.
+## Documentation
+
+I will add a link to the documentation for RustFoundry OS here once I have it up and running.
+
+## License
+
+RustFoundry OS is released under the [GPLv3 License](LICENSE.md).

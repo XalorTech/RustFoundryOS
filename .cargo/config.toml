@@ -5,18 +5,19 @@
 # License: GPLv3 (see LICENSE.md for details)
 # ===============================================================================
 
-[package]
-name = "bootloader"
-version = "0.1.0"
-edition = "2024"
-build = "build.rs"
+[build]
+target-dir = "target"
 
-[dependencies]
-kernel = { path = "../kernel" }
-x86_64 = { version = "0.15.2", default-features = false,features = [
-	"instructions",
-] }
+[target.x86_64-unknown-none]
+linker = "rust-lld"
+rustflags = [
+	"-C", "link-arg=-nostartfiles",
+	"-C", "link-arg=-nodefaultlibs",
+]
 
-[[bin]]
-name = "bootloader"
-path = "src/main.rs"
+[target.aarch64-unknown-none]
+linker = "rust-lld"
+rustflags = [
+	"-C", "link-arg=-nostartfiles",
+	"-C", "link-arg=-nodefaultlibs",
+]
