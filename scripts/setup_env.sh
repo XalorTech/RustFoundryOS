@@ -21,6 +21,12 @@ esac
 
 echo "[SETUP] Detected platform: $PLATFORM"
 
+# -------- Prompt for sudo privileges --------
+if [ "$EUID" -ne 0 ]; then
+	echo "[SETUP] Some steps require sudo privileges. You may be prompted for your password."
+	sudo -v
+fi
+
 # -------- Install rustup if missing --------
 if ! command -v rustup >/dev/null 2>&1; then
 	echo "[SETUP] Installing rustup..."
@@ -99,29 +105,52 @@ echo "[OK] QEMU version $QEMU_VER"
 
 # -------- Install UEFI firmware for QEMU --------
 echo "[SETUP] Installing UEFI firmware for QEMU..."
+FIRMWARE_DIR="resources/firmware"
+mkdir -p "$FIRMWARE_DIR"
+
 case "$PLATFORM" in
 	linux)
 		if command -v apt-get >/dev/null 2>&1; then
 			sudo apt-get install -y ovmf qemu-efi-aarch64
-			cp /usr/share/OVMF/OVMF_CODE.fd . 2>/dev/null || true
-			cp /usr/share/OVMF/OVMF_VARS.fd . 2>/dev/null || true
-			cp /usr/share/AAVMF/AAVMF_CODE.fd QEMU_EFI.fd 2>/dev/null || true
+			OVMF_SRC_DIR="/usr/share/OVMF"
+			CODE_LEGACY="$OVMF_SRC_DIR/OVMF_CODE.fd"
+			VARS_LEGACY="$OVMF_SRC_DIR/OVMF_VARS.fd"
+			CODE_4M="$OVMF_SRC_DIR/OVMF_CODE_4M.fd"
+			VARS_4M="$OVMF_SRC_DIR/OVMF_VARS_4M.fd"
+			if [ -f "$CODE_LEGACY" ] && [ -f "$VARS_LEGACY" ]; then
+				sudo cp "$CODE_LEGACY" "$FIRMWARE_DIR/OVMF_CODE.fd"
+				sudo cp "$VARS_LEGACY" "$FIRMWARE_DIR/OVMF_VARS.fd"
+				sudo chmod 644 "$FIRMWARE_DIR/OVMF_CODE.fd" "$FIRMWARE_DIR/OVMF_VARS.fd"
+				sudo chown $USER:$USER "$FIRMWARE_DIR/OVMF_CODE.fd" "$FIRMWARE_DIR/OVMF_VARS.fd"
+				echo "[SETUP] Copied legacy OVMF firmware files for QEMU."
+			elif [ -f "$CODE_4M" ] && [ -f "$VARS_4M" ]; then
+				sudo cp "$CODE_4M" "$FIRMWARE_DIR/OVMF_CODE.fd"
+				sudo cp "$VARS_4M" "$FIRMWARE_DIR/OVMF_VARS.fd"
+				sudo chmod 644 "$FIRMWARE_DIR/OVMF_CODE.fd" "$FIRMWARE_DIR/OVMF_VARS.fd"
+				sudo chown $USER:$USER "$FIRMWARE_DIR/OVMF_CODE.fd" "$FIRMWARE_DIR/OVMF_VARS.fd"
+				echo "[SETUP] Copied OVMF 4M firmware files for QEMU."
+			else
+				echo "[SETUP] OVMF firmware files not found. Please install the 'ovmf' package."
+			fi
+			sudo cp /usr/share/AAVMF/AAVMF_CODE.fd "$FIRMWARE_DIR/QEMU_EFI.fd" 2>/dev/null || true
 		elif command -v dnf >/dev/null 2>&1; then
 			sudo dnf install -y edk2-ovmf edk2-aarch64
-			cp /usr/share/edk2/ovmf/OVMF_CODE.fd . 2>/dev/null || true
-			cp /usr/share/edk2/ovmf/OVMF_VARS.fd . 2>/dev/null || true
-			cp /usr/share/edk2/aarch64/QEMU_EFI.fd . 2>/dev/null || true
+			ln -sf /usr/share/edk2/ovmf/OVMF_CODE.fd "$FIRMWARE_DIR/OVMF_CODE.fd" 2>/dev/null || true
+			ln -sf /usr/share/edk2/ovmf/OVMF_VARS.fd "$FIRMWARE_DIR/OVMF_VARS.fd" 2>/dev/null || true
+			ln -sf /usr/share/edk2/aarch64/QEMU_EFI.fd "$FIRMWARE_DIR/QEMU_EFI.fd" 2>/dev/null || true
 		fi
 		;;
 	macos)
 		brew install qemu
-		cp "$(brew --prefix qemu)/share/qemu/edk2-x86_64-code.fd" OVMF_CODE.fd 2>/dev/null || true
-		cp "$(brew --prefix qemu)/share/qemu/edk2-arm-vars.fd" QEMU_EFI.fd 2>/dev/null || true
+		cp "$(brew --prefix qemu)/share/qemu/edk2-x86_64-code.fd" "$FIRMWARE_DIR/OVMF_CODE.fd" 2>/dev/null || true
+		cp "$(brew --prefix qemu)/share/qemu/edk2-x86_64-vars.fd" "$FIRMWARE_DIR/OVMF_VARS.fd" 2>/dev/null || true
+		cp "$(brew --prefix qemu)/share/qemu/edk2-aarch64-code.fd" "$FIRMWARE_DIR/QEMU_EFI.fd" 2>/dev/null || true
+		chmod 644 "$FIRMWARE_DIR/OVMF_CODE.fd" "$FIRMWARE_DIR/OVMF_VARS.fd" "$FIRMWARE_DIR/QEMU_EFI.fd" 2>/dev/null || true
 		;;
 	windows)
 		winget install --id=QEMU.QEMU -e --source winget
-		echo "[INFO] Please copy OVMF_CODE.fd / OVMF_VARS.fd / QEMU_EFI.fd from your QEMU install dir into the project root."
+		echo "[INFO] Please copy OVMF_CODE.fd / OVMF_VARS.fd / QEMU_EFI.fd into $FIRMWARE_DIR"
 		;;
 esac
 
-echo "[SETUP] Environment setup complete. You can now run 'make build' or 'make all'."
+echo "[OK] Firmware files copied to $FIRMWARE_DIR"

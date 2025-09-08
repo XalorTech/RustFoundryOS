@@ -24,8 +24,9 @@
 
 _start:
 	// Set a private bootstrap stack (UEFI provides one; we prefer determinism).
-	adrp		sp, stack_top@PAGE
-	add			sp, sp, stack_top@PAGEOFF
+	adrp		x0, stack_top
+	add			x0, x0, :lo12:stack_top
+	mov			sp, x0
 	// AAPCS64 mandates 16-byte stack alignment at call sites; stack_top is aligned.
 
 	// UEFI passes:
@@ -36,7 +37,7 @@ _start:
 1:	wfe
 	b			1b
 
-	.section	.bss, "aw", %nobits
+	.bss
 	.align		4
 	.global		stack_area
 	.global		stack_top

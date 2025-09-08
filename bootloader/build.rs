@@ -12,33 +12,35 @@ use std::process::Command;
 fn main() {
 	let target = env::var("TARGET").unwrap_or_default();
 	let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR not set"));
+	let manifest_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set"));
+
+	// Define veneer source paths once
+	let x86_64_src = manifest_dir.join("asm/x86_64/entry.asm");
+	let aarch64_src = manifest_dir.join("asm/aarch64/entry.S");
 
 	// Always rebuild if veneers change
-	println!("cargo:rerun-if-changed=bootloader/asm/x86_64/entry.asm");
-	println!("cargo:rerun-if-changed=bootloader/asm/aarch64/entry.S");
+	println!("cargo:rerun-if-changed={}", x86_64_src.display());
+	println!("cargo:rerun-if-changed={}", aarch64_src.display());
 
 	if target.starts_with("x86_64") {
-		let asm = "bootloader/asm/x86_64/entry.asm";
 		let obj = out_dir.join("entry_x86_64.obj");
 
 		let status = Command::new("nasm")
 			.args(["-f", "win64", "-g", "-o"])
 			.arg(&obj)
-			.arg(asm)
+			.arg(&x86_64_src)
 			.status()
 			.expect("failed to spawn nasm");
 		if !status.success() {
-			panic!("nasm failed for {}", asm);
+			panic!("nasm failed for {}", x86_64_src.display());
 		}
 
-		// Link the object and set the entry symbol for PE/COFF
 		println!("cargo:rustc-link-arg-bins={}", obj.display());
 		println!("cargo:rustc-link-arg-bins=/ENTRY:_start");
+
 	} else if target.starts_with("aarch64") {
-		let asm = "bootloader/asm/aarch64/entry.S";
 		let obj = out_dir.join("entry_aarch64.obj");
 
-		// Use clang to produce a COFF ARM64 object suitable for lld-link
 		let status = Command::new("clang")
 			.args([
 				"-c",
@@ -47,15 +49,16 @@ fn main() {
 				"-o",
 			])
 			.arg(&obj)
-			.arg(asm)
+			.arg(&aarch64_src)
 			.status()
 			.expect("failed to spawn clang");
 		if !status.success() {
-			panic!("clang failed for {}", asm);
+			panic!("clang failed for {}", aarch64_src.display());
 		}
 
 		println!("cargo:rustc-link-arg-bins={}", obj.display());
 		println!("cargo:rustc-link-arg-bins=/ENTRY:_start");
+
 	} else {
 		// Other architectures not wired yet
 	}

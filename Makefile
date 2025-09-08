@@ -164,13 +164,18 @@ build: lint
 #   - Firmware files present in the working directory
 #
 # DEBUG=true enables QEMU debug flags for breakpoints, logging, and no reboot/shutdown.
+FIRMWARE_DIR := resources/firmware
+OVMF_CODE := $(FIRMWARE_DIR)/OVMF_CODE.fd
+OVMF_VARS := $(FIRMWARE_DIR)/OVMF_VARS.fd
+QEMU_EFI := $(FIRMWARE_DIR)/QEMU_EFI.fd
+
 run:
 	@echo "[RUN] Running RustFoundry OS for architectures: $(ARCHS)"
 	@for ARCH in $(ARCHS); do \
 		echo "[RUN] Launching QEMU for $$ARCH..."; \
 		if [ "$$ARCH" = "$(ARCH_X64)" ]; then \
-			if [ ! -f OVMF_CODE.fd ] || [ ! -f OVMF_VARS.fd ]; then \
-				echo "[ERROR] Missing OVMF_CODE.fd or OVMF_VARS.fd"; exit 1; \
+			if [ ! -f $(OVMF_CODE) ] || [ ! -f $(OVMF_VARS) ]; then \
+				echo "[ERROR] Missing $(OVMF_CODE) or $(OVMF_VARS)"; exit 1; \
 			fi; \
 			if [ ! -f dist/$$ARCH/EFI/BOOT/BOOTX64.EFI ]; then \
 				echo "[ERROR] Missing dist/$$ARCH/EFI/BOOT/BOOTX64.EFI — build first"; exit 1; \
@@ -178,13 +183,13 @@ run:
 			ESP_DIR=dist/$$ARCH; \
 			[ "$(DEBUG)" = "true" ] && DEBUG_OPTS="-s -S -d int,cpu,exec -no-reboot -no-shutdown" || DEBUG_OPTS=""; \
 			qemu-system-x86_64 \
-				-drive if=pflash,format=raw,readonly=on,file=OVMF_CODE.fd \
-				-drive if=pflash,format=raw,file=OVMF_VARS.fd \
+				-drive if=pflash,format=raw,readonly=on,file=$(OVMF_CODE) \
+				-drive if=pflash,format=raw,file=$(OVMF_VARS) \
 				-drive format=raw,file=fat:rw:$$ESP_DIR \
 				$$DEBUG_OPTS; \
 		elif [ "$$ARCH" = "$(ARCH_ARM64)" ]; then \
-			if [ ! -f QEMU_EFI.fd ]; then \
-				echo "[ERROR] Missing QEMU_EFI.fd"; exit 1; \
+			if [ ! -f $(QEMU_EFI) ]; then \
+				echo "[ERROR] Missing $(QEMU_EFI)"; exit 1; \
 			fi; \
 			if [ ! -f dist/$$ARCH/EFI/BOOT/BOOTAA64.EFI ]; then \
 				echo "[ERROR] Missing dist/$$ARCH/EFI/BOOT/BOOTAA64.EFI — build first"; exit 1; \
@@ -193,7 +198,7 @@ run:
 			[ "$(DEBUG)" = "true" ] && DEBUG_OPTS="-s -S -d int,cpu,exec -no-reboot -no-shutdown" || DEBUG_OPTS=""; \
 			qemu-system-aarch64 \
 				-machine virt -cpu cortex-a57 \
-				-drive if=pflash,format=raw,readonly=on,file=QEMU_EFI.fd \
+				-drive if=pflash,format=raw,readonly=on,file=$(QEMU_EFI) \
 				-drive format=raw,file=fat:rw:$$ESP_DIR \
 				$$DEBUG_OPTS; \
 		else \
